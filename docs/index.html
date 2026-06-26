@@ -1,0 +1,506 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>f1-undercut-sim — does the undercut work?</title>
+<meta name="description" content="A physics-light F1 race-strategy simulator. Models lap time from base pace, fuel burn and tyre wear, then runs pit-now vs stay-out and returns a verdict.">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600;700&family=Space+Grotesk:wght@400;500;600;700&display=swap" rel="stylesheet">
+<style>
+  *{ box-sizing:border-box; }
+  html,body{ margin:0; background:#08090b; }
+  ::selection{ background:#ff2e3b; color:#fff; }
+  @keyframes sweep{ 0%{ transform:translateX(-10vw); opacity:0; } 12%{ opacity:.9; } 100%{ transform:translateX(110vw); opacity:0; } }
+  @keyframes blink{ 0%,55%{ opacity:1; } 56%,100%{ opacity:0; } }
+  input[type=range]{ -webkit-appearance:none; appearance:none; width:100%; height:3px; background:rgba(255,255,255,.14); border-radius:3px; outline:none; }
+  input[type=range]::-webkit-slider-thumb{ -webkit-appearance:none; appearance:none; width:15px; height:15px; border-radius:50%; background:#fff; border:3px solid #ff2e3b; cursor:pointer; box-shadow:0 0 0 3px rgba(255,46,59,.18); }
+  input[type=range]::-moz-range-thumb{ width:15px; height:15px; border-radius:50%; background:#fff; border:3px solid #ff2e3b; cursor:pointer; }
+  @media (max-width:760px){
+    h1{ font-size:42px !important; }
+    .grid2{ grid-template-columns:1fr !important; }
+    .grid3{ grid-template-columns:1fr !important; }
+  }
+</style>
+</head>
+<body>
+<div style="--accent:#ff2e3b; min-height:100vh; background:#08090b; color:#f2f3f5; font-family:'Space Grotesk',system-ui,sans-serif; background-image:radial-gradient(120% 80% at 50% -10%, rgba(255,46,59,0.10), transparent 60%), linear-gradient(rgba(255,255,255,0.025) 1px, transparent 1px), linear-gradient(90deg, rgba(255,255,255,0.025) 1px, transparent 1px); background-size:auto, 100% 46px, 46px 100%;">
+
+  <!-- TOP BAR -->
+  <div style="max-width:1120px; margin:0 auto; padding:20px 28px; display:flex; align-items:center; justify-content:space-between; gap:16px;">
+    <div style="display:flex; align-items:center; gap:12px; font-family:'JetBrains Mono',monospace; font-size:13px; letter-spacing:.02em;">
+      <span style="width:9px; height:9px; border-radius:50%; background:var(--accent); box-shadow:0 0 10px var(--accent); animation:blink 1.6s steps(1) infinite;"></span>
+      <span style="color:#7f868f;">Arthavpatel</span><span style="color:#454a52;">/</span><span style="color:#f2f3f5; font-weight:600;">f1-undercut-sim</span>
+    </div>
+    <a href="https://github.com/Arthavpatel/f1-undercut-sim" target="_blank" style="display:inline-flex; align-items:center; gap:8px; text-decoration:none; color:#cfd3d9; font-family:'JetBrains Mono',monospace; font-size:12.5px; border:1px solid rgba(255,255,255,.14); padding:8px 14px; border-radius:6px; background:rgba(255,255,255,.03);">
+      <span style="font-weight:600;">★ View on GitHub</span>
+    </a>
+  </div>
+
+  <!-- HERO -->
+  <section style="position:relative; max-width:1120px; margin:0 auto; padding:64px 28px 40px; overflow:hidden;">
+    <div style="position:absolute; top:0; bottom:0; width:2px; background:linear-gradient(180deg, transparent, var(--accent), transparent); filter:blur(.5px); animation:sweep 6.5s linear infinite; pointer-events:none;"></div>
+    <div style="font-family:'JetBrains Mono',monospace; font-size:12.5px; letter-spacing:.34em; color:var(--accent); text-transform:uppercase; margin-bottom:22px;">Deterministic race-strategy engine</div>
+    <h1 style="margin:0; font-size:74px; line-height:0.98; font-weight:700; letter-spacing:-0.03em; max-width:14ch;">Does the undercut <span style="color:var(--accent);">work?</span></h1>
+    <p style="margin:26px 0 0; max-width:62ch; font-size:18.5px; line-height:1.6; color:#aab0b8;">A physics-light F1 simulator that turns one strategic question into a number. It models lap time from <span style="color:#e6e9ee;">base pace + fuel burn + tyre wear</span>, then advances the field forward — pit-now versus stay-out — and returns a verdict.</p>
+    <div style="display:flex; flex-wrap:wrap; gap:12px; margin-top:34px;">
+      <a href="https://github.com/Arthavpatel/f1-undercut-sim" target="_blank" style="text-decoration:none; background:var(--accent); color:#fff; font-weight:600; font-size:15px; padding:14px 24px; border-radius:8px;">Explore the repo →</a>
+      <a href="#engine" style="text-decoration:none; color:#dfe2e7; font-weight:500; font-size:15px; padding:14px 24px; border-radius:8px; border:1px solid rgba(255,255,255,.16);">How the engine works</a>
+    </div>
+    <div class="grid3" style="display:grid; grid-template-columns:repeat(3,1fr); gap:14px; margin-top:46px; max-width:760px;">
+      <div style="border:1px solid rgba(255,255,255,.09); border-radius:10px; padding:18px; background:rgba(255,255,255,.02);">
+        <div style="font-family:'JetBrains Mono',monospace; font-size:26px; font-weight:600; color:#fff;">3</div>
+        <div style="font-size:13px; color:#868d96; margin-top:6px; line-height:1.4;">decoupled models — pace, fuel, tyre wear — fit from real lap data</div>
+      </div>
+      <div style="border:1px solid rgba(255,255,255,.09); border-radius:10px; padding:18px; background:rgba(255,255,255,.02);">
+        <div style="font-family:'JetBrains Mono',monospace; font-size:26px; font-weight:600; color:#fff;">1</div>
+        <div style="font-size:13px; color:#868d96; margin-top:6px; line-height:1.4;">pure forward-sim engine every question composes on</div>
+      </div>
+      <div style="border:1px solid rgba(255,255,255,.09); border-radius:10px; padding:18px; background:rgba(255,255,255,.02);">
+        <div style="font-family:'JetBrains Mono',monospace; font-size:26px; font-weight:600; color:#fff;">0</div>
+        <div style="font-size:13px; color:#868d96; margin-top:6px; line-height:1.4;">randomness in the core: deterministic, then noise on top</div>
+      </div>
+    </div>
+  </section>
+
+  <!-- INTERACTIVE VERDICT -->
+  <section id="engine" style="max-width:1120px; margin:0 auto; padding:54px 28px;">
+    <div style="display:flex; align-items:baseline; gap:14px; flex-wrap:wrap; margin-bottom:8px;">
+      <span style="font-family:'JetBrains Mono',monospace; font-size:12px; color:var(--accent); letter-spacing:.2em;">01 / VERDICT</span>
+      <h2 style="margin:0; font-size:34px; font-weight:700; letter-spacing:-0.02em;">undercut_verdict()</h2>
+    </div>
+    <p style="margin:0 0 28px; color:#969ca4; font-size:16px; max-width:70ch;">The headline call. Run the engine twice — pit now vs hold position — diff the result. Move the inputs; the simulation re-runs live.</p>
+
+    <div class="grid2" style="display:grid; grid-template-columns:300px 1fr; gap:22px; align-items:stretch;">
+
+      <!-- controls -->
+      <div style="border:1px solid rgba(255,255,255,.1); border-radius:14px; padding:22px; background:rgba(255,255,255,.022);">
+        <div style="font-family:'JetBrains Mono',monospace; font-size:11px; letter-spacing:.18em; color:#6f757e; margin-bottom:20px;">INPUTS · HAD vs VER</div>
+
+        <div style="margin-bottom:20px;">
+          <div style="display:flex; justify-content:space-between; font-size:13px; margin-bottom:9px;"><span style="color:#b9bec5;">Gap behind VER</span><span id="gapLabel" style="font-family:'JetBrains Mono',monospace; color:#fff;">1.2s</span></div>
+          <input type="range" min="0.2" max="4" step="0.1" value="1.2" oninput="onGap(this.value)">
+        </div>
+        <div style="margin-bottom:20px;">
+          <div style="display:flex; justify-content:space-between; font-size:13px; margin-bottom:9px;"><span style="color:#b9bec5;">Pit-lane loss</span><span id="pitLossLabel" style="font-family:'JetBrains Mono',monospace; color:#fff;">20.0s</span></div>
+          <input type="range" min="14" max="26" step="0.5" value="20" oninput="onPitLoss(this.value)">
+        </div>
+        <div style="margin-bottom:20px;">
+          <div style="display:flex; justify-content:space-between; font-size:13px; margin-bottom:9px;"><span style="color:#b9bec5;">Tyre age at pit</span><span id="oldAgeLabel" style="font-family:'JetBrains Mono',monospace; color:#fff;">22 laps</span></div>
+          <input type="range" min="6" max="36" step="1" value="22" oninput="onOldAge(this.value)">
+        </div>
+        <div style="margin-bottom:20px;">
+          <div style="display:flex; justify-content:space-between; font-size:13px; margin-bottom:9px;"><span style="color:#b9bec5;">Degradation rate</span><span id="degLabel" style="font-family:'JetBrains Mono',monospace; color:#fff;">0.100 s/lap</span></div>
+          <input type="range" min="0.02" max="0.18" step="0.005" value="0.10" oninput="onDeg(this.value)">
+        </div>
+        <div style="margin-bottom:4px;">
+          <div style="display:flex; justify-content:space-between; font-size:13px; margin-bottom:9px;"><span style="color:#b9bec5;">VER reaction delay</span><span id="reactionLabel" style="font-family:'JetBrains Mono',monospace; color:#fff;">3 laps</span></div>
+          <input type="range" min="0" max="6" step="1" value="3" oninput="onReaction(this.value)">
+        </div>
+      </div>
+
+      <!-- chart + verdict -->
+      <div style="border:1px solid rgba(255,255,255,.1); border-radius:14px; padding:8px 8px 4px; background:rgba(255,255,255,.022); display:flex; flex-direction:column;">
+        <div style="display:flex; justify-content:space-between; align-items:center; padding:14px 16px 6px;">
+          <div style="display:flex; gap:18px; font-size:12.5px; font-family:'JetBrains Mono',monospace;">
+            <span style="display:flex; align-items:center; gap:7px; color:#cfd3d9;"><span style="width:16px; height:3px; background:var(--accent); border-radius:2px;"></span>pit now</span>
+            <span style="display:flex; align-items:center; gap:7px; color:#cfd3d9;"><span style="width:16px; height:3px; background:#5b626b; border-radius:2px;"></span>stay out</span>
+          </div>
+          <span style="font-size:11px; font-family:'JetBrains Mono',monospace; color:#6f757e;">gap to VER (s) · lap window</span>
+        </div>
+        <svg viewBox="0 0 680 260" style="width:100%; height:auto; display:block;">
+          <line id="zeroLine" x1="44" y1="130" x2="560" y2="130" stroke="rgba(255,255,255,.22)" stroke-width="1" stroke-dasharray="3 4"></line>
+          <text id="zeroText" x="566" y="134" fill="#8b9199" font-size="11" font-family="'JetBrains Mono',monospace">level</text>
+          <text x="566" y="34" fill="#6f757e" font-size="10.5" font-family="'JetBrains Mono',monospace">VER ahead ↑</text>
+          <text x="566" y="246" fill="#6f757e" font-size="10.5" font-family="'JetBrains Mono',monospace">HAD ahead ↓</text>
+          <polyline id="gapBPath" points="" fill="none" stroke="#5b626b" stroke-width="2.5" stroke-linejoin="round"></polyline>
+          <polyline id="gapAPath" points="" fill="none" stroke="var(--accent)" stroke-width="3" stroke-linejoin="round" stroke-linecap="round"></polyline>
+          <circle id="crossDot" cx="-10" cy="130" r="0" fill="var(--accent)"></circle>
+        </svg>
+        <div style="display:flex; align-items:center; gap:16px; border-top:1px solid rgba(255,255,255,.08); margin:6px 8px 0; padding:16px 8px; flex-wrap:wrap;">
+          <div id="verdictBox" style="display:flex; align-items:center; gap:10px; padding:9px 16px; border-radius:8px; background:rgba(255,255,255,.05); border:1px solid rgba(255,255,255,.16);">
+            <span id="verdictLabel" style="font-family:'JetBrains Mono',monospace; font-weight:700; font-size:14px; color:#e6e9ee; letter-spacing:.04em;">TRACK POSITION</span>
+          </div>
+          <div style="display:flex; gap:26px;">
+            <div><div id="gainText" style="font-family:'JetBrains Mono',monospace; font-size:20px; font-weight:600; color:#fff;">+0.0s</div><div style="font-size:11.5px; color:#7f868f;">time gained vs stay-out</div></div>
+            <div><div id="clearsText" style="font-family:'JetBrains Mono',monospace; font-size:20px; font-weight:600; color:#fff;">NO</div><div style="font-size:11.5px; color:#7f868f;">clears VER on track</div></div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- PACE MODEL -->
+  <section style="max-width:1120px; margin:0 auto; padding:54px 28px;">
+    <div style="display:flex; align-items:baseline; gap:14px; flex-wrap:wrap; margin-bottom:8px;">
+      <span style="font-family:'JetBrains Mono',monospace; font-size:12px; color:var(--accent); letter-spacing:.2em;">02 / PACE MODEL</span>
+      <h2 style="margin:0; font-size:34px; font-weight:700; letter-spacing:-0.02em;">predicted_lap_time</h2>
+    </div>
+    <p style="margin:0 0 26px; color:#969ca4; font-size:16px; max-width:72ch;">Every lap time the engine produces is one clean sum of decoupled effects — no double-counting, each term fit from real lap data.</p>
+
+    <div style="font-family:'JetBrains Mono',monospace; font-size:clamp(14px,2.2vw,21px); color:#cfd3d9; background:#0d0e11; border:1px solid rgba(255,255,255,.09); border-radius:12px; padding:22px 24px; margin-bottom:24px; overflow-x:auto; white-space:nowrap;">
+      <span style="color:#fff;">predicted_lap_time</span> <span style="color:#6f757e;">=</span> <span style="color:#9aa0e8;">base_pace</span><span style="color:#6f757e;">[driver]</span> <span style="color:var(--accent);">+</span> <span style="color:#ffd24a;">fuel_effect</span><span style="color:#6f757e;">(lap)</span> <span style="color:var(--accent);">+</span> <span style="color:#5fd0a6;">deg_effect</span><span style="color:#6f757e;">(tyre_age, compound)</span>
+    </div>
+
+    <div class="grid3" style="display:grid; grid-template-columns:repeat(3,1fr); gap:16px;">
+      <div style="border:1px solid rgba(255,255,255,.1); border-radius:12px; padding:22px; background:rgba(255,255,255,.022);">
+        <div style="display:flex; align-items:center; gap:10px; margin-bottom:14px;"><span style="width:10px; height:10px; border-radius:3px; background:#9aa0e8;"></span><span style="font-family:'JetBrains Mono',monospace; font-size:14px; font-weight:600; color:#fff;">base_pace[driver]</span></div>
+        <p style="margin:0; font-size:14px; line-height:1.6; color:#a4aab2;">Each driver's reference lap — the median of their clean green-flag laps. The anchor every correction is measured against.</p>
+        <div style="margin-top:14px; font-family:'JetBrains Mono',monospace; font-size:12px; color:#9aa0e8;">median clean lap</div>
+      </div>
+      <div style="border:1px solid rgba(255,255,255,.1); border-radius:12px; padding:22px; background:rgba(255,255,255,.022);">
+        <div style="display:flex; align-items:center; gap:10px; margin-bottom:14px;"><span style="width:10px; height:10px; border-radius:3px; background:#ffd24a;"></span><span style="font-family:'JetBrains Mono',monospace; font-size:14px; font-weight:600; color:#fff;">fuel_effect(lap)</span></div>
+        <p style="margin:0; font-size:14px; line-height:1.6; color:#a4aab2;">Cars get lighter as fuel burns, so laps get faster. Expressed relative to mid-race fuel so it never double-counts the base.</p>
+        <div style="margin-top:14px; font-family:'JetBrains Mono',monospace; font-size:12px; color:#ffd24a;">~0.035 s/kg burned</div>
+      </div>
+      <div style="border:1px solid rgba(255,255,255,.1); border-radius:12px; padding:22px; background:rgba(255,255,255,.022);">
+        <div style="display:flex; align-items:center; gap:10px; margin-bottom:14px;"><span style="width:10px; height:10px; border-radius:3px; background:#5fd0a6;"></span><span style="font-family:'JetBrains Mono',monospace; font-size:14px; font-weight:600; color:#fff;">deg_effect(age)</span></div>
+        <p style="margin:0; font-size:14px; line-height:1.6; color:#a4aab2;">Tyre wear, fuel removed: a per-compound linear rate applied against a reference age. Soft falls off fast, hard holds on.</p>
+        <div style="margin-top:14px; font-family:'JetBrains Mono',monospace; font-size:12px; color:#5fd0a6;">fuel-decoupled slope</div>
+      </div>
+    </div>
+  </section>
+
+  <!-- TYRE DEG CHART -->
+  <section style="max-width:1120px; margin:0 auto; padding:54px 28px;">
+    <div style="display:flex; align-items:baseline; gap:14px; flex-wrap:wrap; margin-bottom:8px;">
+      <span style="font-family:'JetBrains Mono',monospace; font-size:12px; color:var(--accent); letter-spacing:.2em;">03 / SIGNAL</span>
+      <h2 style="margin:0; font-size:34px; font-weight:700; letter-spacing:-0.02em;">Tyre degradation, fuel removed</h2>
+    </div>
+    <p style="margin:0 0 22px; color:#969ca4; font-size:16px; max-width:72ch;">Fuel-correct every lap, fit a linear slope per stint, average across the field. What's left is pure wear — seconds lost per lap of tyre age, per compound.</p>
+
+    <div style="border:1px solid rgba(255,255,255,.1); border-radius:14px; padding:18px; background:#0b0c0f;">
+      <svg viewBox="0 0 680 300" style="width:100%; height:auto; display:block;">
+        <text x="14" y="150" fill="#6f757e" font-size="11" font-family="'JetBrains Mono',monospace" transform="rotate(-90 14 150)" text-anchor="middle">fuel-corrected lap time (s)</text>
+        <line x1="52" y1="28" x2="52" y2="256" stroke="rgba(255,255,255,.14)"></line>
+        <line x1="52" y1="256" x2="530" y2="256" stroke="rgba(255,255,255,.14)"></line>
+        <text x="46" y="243.8" fill="#6f757e" font-size="10.5" font-family="'JetBrains Mono',monospace" text-anchor="end">74</text>
+<line x1="52" y1="240.8" x2="530" y2="240.8" stroke="rgba(255,255,255,.05)"></line>
+<text x="46" y="183.0" fill="#6f757e" font-size="10.5" font-family="'JetBrains Mono',monospace" text-anchor="end">76</text>
+<line x1="52" y1="180.0" x2="530" y2="180.0" stroke="rgba(255,255,255,.05)"></line>
+<text x="46" y="122.2" fill="#6f757e" font-size="10.5" font-family="'JetBrains Mono',monospace" text-anchor="end">78</text>
+<line x1="52" y1="119.2" x2="530" y2="119.2" stroke="rgba(255,255,255,.05)"></line>
+<text x="46" y="61.4" fill="#6f757e" font-size="10.5" font-family="'JetBrains Mono',monospace" text-anchor="end">80</text>
+<line x1="52" y1="58.4" x2="530" y2="58.4" stroke="rgba(255,255,255,.05)"></line>
+        <text x="52.0" y="272" fill="#6f757e" font-size="10.5" font-family="'JetBrains Mono',monospace" text-anchor="middle">0</text>
+<text x="140.5" y="272" fill="#6f757e" font-size="10.5" font-family="'JetBrains Mono',monospace" text-anchor="middle">10</text>
+<text x="229.0" y="272" fill="#6f757e" font-size="10.5" font-family="'JetBrains Mono',monospace" text-anchor="middle">20</text>
+<text x="317.6" y="272" fill="#6f757e" font-size="10.5" font-family="'JetBrains Mono',monospace" text-anchor="middle">30</text>
+<text x="406.1" y="272" fill="#6f757e" font-size="10.5" font-family="'JetBrains Mono',monospace" text-anchor="middle">40</text>
+<text x="494.6" y="272" fill="#6f757e" font-size="10.5" font-family="'JetBrains Mono',monospace" text-anchor="middle">50</text>
+        <text x="291" y="292" fill="#868d96" font-size="11.5" font-family="'JetBrains Mono',monospace" text-anchor="middle">tyre age (laps on this set)</text>
+        <g>
+        <circle cx="186.0" cy="194.4" r="2.4" fill="#ff3b46" opacity="0.42"></circle>
+<circle cx="172.8" cy="184.7" r="2.4" fill="#ff3b46" opacity="0.42"></circle>
+<circle cx="110.5" cy="191.8" r="2.4" fill="#ff3b46" opacity="0.42"></circle>
+<circle cx="75.6" cy="168.0" r="2.4" fill="#ff3b46" opacity="0.42"></circle>
+<circle cx="214.1" cy="221.4" r="2.4" fill="#ff3b46" opacity="0.42"></circle>
+<circle cx="243.5" cy="234.6" r="2.4" fill="#ff3b46" opacity="0.42"></circle>
+<circle cx="209.2" cy="186.4" r="2.4" fill="#ff3b46" opacity="0.42"></circle>
+<circle cx="214.3" cy="225.0" r="2.4" fill="#ff3b46" opacity="0.42"></circle>
+<circle cx="144.3" cy="188.3" r="2.4" fill="#ff3b46" opacity="0.42"></circle>
+<circle cx="178.4" cy="207.9" r="2.4" fill="#ff3b46" opacity="0.42"></circle>
+<circle cx="127.8" cy="180.0" r="2.4" fill="#ff3b46" opacity="0.42"></circle>
+<circle cx="184.0" cy="215.6" r="2.4" fill="#ff3b46" opacity="0.42"></circle>
+<circle cx="184.9" cy="208.1" r="2.4" fill="#ff3b46" opacity="0.42"></circle>
+<circle cx="85.2" cy="179.9" r="2.4" fill="#ff3b46" opacity="0.42"></circle>
+<circle cx="187.3" cy="198.7" r="2.4" fill="#ff3b46" opacity="0.42"></circle>
+<circle cx="146.3" cy="198.6" r="2.4" fill="#ff3b46" opacity="0.42"></circle>
+<circle cx="189.9" cy="207.5" r="2.4" fill="#ff3b46" opacity="0.42"></circle>
+<circle cx="153.8" cy="206.0" r="2.4" fill="#ff3b46" opacity="0.42"></circle>
+<circle cx="234.0" cy="218.5" r="2.4" fill="#ff3b46" opacity="0.42"></circle>
+<circle cx="203.5" cy="212.4" r="2.4" fill="#ff3b46" opacity="0.42"></circle>
+<circle cx="112.8" cy="193.0" r="2.4" fill="#ff3b46" opacity="0.42"></circle>
+<circle cx="151.7" cy="195.9" r="2.4" fill="#ff3b46" opacity="0.42"></circle>
+<circle cx="185.2" cy="187.9" r="2.4" fill="#ff3b46" opacity="0.42"></circle>
+<circle cx="113.9" cy="182.6" r="2.4" fill="#ff3b46" opacity="0.42"></circle>
+<circle cx="253.5" cy="209.2" r="2.4" fill="#ff3b46" opacity="0.42"></circle>
+<circle cx="183.5" cy="195.0" r="2.4" fill="#ff3b46" opacity="0.42"></circle>
+<circle cx="244.7" cy="224.1" r="2.4" fill="#ff3b46" opacity="0.42"></circle>
+<circle cx="79.3" cy="180.2" r="2.4" fill="#ff3b46" opacity="0.42"></circle>
+<circle cx="177.3" cy="206.4" r="2.4" fill="#ff3b46" opacity="0.42"></circle>
+<circle cx="248.3" cy="219.3" r="2.4" fill="#ff3b46" opacity="0.42"></circle>
+<circle cx="230.0" cy="224.0" r="2.4" fill="#ff3b46" opacity="0.42"></circle>
+<circle cx="234.2" cy="220.2" r="2.4" fill="#ff3b46" opacity="0.42"></circle>
+<circle cx="178.0" cy="193.6" r="2.4" fill="#ff3b46" opacity="0.42"></circle>
+<circle cx="183.5" cy="199.4" r="2.4" fill="#ff3b46" opacity="0.42"></circle>
+<circle cx="183.7" cy="205.5" r="2.4" fill="#ff3b46" opacity="0.42"></circle>
+<circle cx="230.5" cy="211.7" r="2.4" fill="#ff3b46" opacity="0.42"></circle>
+<circle cx="88.7" cy="183.2" r="2.4" fill="#ff3b46" opacity="0.42"></circle>
+<circle cx="182.3" cy="208.3" r="2.4" fill="#ff3b46" opacity="0.42"></circle>
+<circle cx="105.4" cy="191.8" r="2.4" fill="#ff3b46" opacity="0.42"></circle>
+<circle cx="130.4" cy="194.5" r="2.4" fill="#ff3b46" opacity="0.42"></circle>
+<circle cx="262.5" cy="236.8" r="2.4" fill="#ff3b46" opacity="0.42"></circle>
+<circle cx="154.9" cy="218.0" r="2.4" fill="#ff3b46" opacity="0.42"></circle>
+<circle cx="93.1" cy="183.5" r="2.4" fill="#ff3b46" opacity="0.42"></circle>
+<circle cx="99.5" cy="191.1" r="2.4" fill="#ff3b46" opacity="0.42"></circle>
+<circle cx="260.6" cy="226.1" r="2.4" fill="#ff3b46" opacity="0.42"></circle>
+<circle cx="224.2" cy="211.6" r="2.4" fill="#ff3b46" opacity="0.42"></circle>
+<circle cx="247.4" cy="211.0" r="2.4" fill="#ffd24a" opacity="0.42"></circle>
+<circle cx="131.9" cy="190.5" r="2.4" fill="#ffd24a" opacity="0.42"></circle>
+<circle cx="275.3" cy="188.2" r="2.4" fill="#ffd24a" opacity="0.42"></circle>
+<circle cx="196.2" cy="174.3" r="2.4" fill="#ffd24a" opacity="0.42"></circle>
+<circle cx="280.0" cy="172.7" r="2.4" fill="#ffd24a" opacity="0.42"></circle>
+<circle cx="298.8" cy="174.8" r="2.4" fill="#ffd24a" opacity="0.42"></circle>
+<circle cx="238.1" cy="194.6" r="2.4" fill="#ffd24a" opacity="0.42"></circle>
+<circle cx="72.6" cy="204.9" r="2.4" fill="#ffd24a" opacity="0.42"></circle>
+<circle cx="94.8" cy="221.3" r="2.4" fill="#ffd24a" opacity="0.42"></circle>
+<circle cx="170.9" cy="181.3" r="2.4" fill="#ffd24a" opacity="0.42"></circle>
+<circle cx="265.8" cy="190.0" r="2.4" fill="#ffd24a" opacity="0.42"></circle>
+<circle cx="195.6" cy="220.0" r="2.4" fill="#ffd24a" opacity="0.42"></circle>
+<circle cx="145.4" cy="193.2" r="2.4" fill="#ffd24a" opacity="0.42"></circle>
+<circle cx="208.3" cy="168.2" r="2.4" fill="#ffd24a" opacity="0.42"></circle>
+<circle cx="247.1" cy="194.2" r="2.4" fill="#ffd24a" opacity="0.42"></circle>
+<circle cx="225.1" cy="194.9" r="2.4" fill="#ffd24a" opacity="0.42"></circle>
+<circle cx="243.0" cy="198.0" r="2.4" fill="#ffd24a" opacity="0.42"></circle>
+<circle cx="229.9" cy="190.0" r="2.4" fill="#ffd24a" opacity="0.42"></circle>
+<circle cx="139.4" cy="201.5" r="2.4" fill="#ffd24a" opacity="0.42"></circle>
+<circle cx="163.7" cy="195.6" r="2.4" fill="#ffd24a" opacity="0.42"></circle>
+<circle cx="119.3" cy="209.6" r="2.4" fill="#ffd24a" opacity="0.42"></circle>
+<circle cx="304.3" cy="165.2" r="2.4" fill="#ffd24a" opacity="0.42"></circle>
+<circle cx="224.6" cy="176.9" r="2.4" fill="#ffd24a" opacity="0.42"></circle>
+<circle cx="200.5" cy="198.7" r="2.4" fill="#ffd24a" opacity="0.42"></circle>
+<circle cx="307.8" cy="168.7" r="2.4" fill="#ffd24a" opacity="0.42"></circle>
+<circle cx="228.3" cy="188.2" r="2.4" fill="#ffd24a" opacity="0.42"></circle>
+<circle cx="296.7" cy="191.3" r="2.4" fill="#ffd24a" opacity="0.42"></circle>
+<circle cx="79.8" cy="207.5" r="2.4" fill="#ffd24a" opacity="0.42"></circle>
+<circle cx="208.0" cy="195.8" r="2.4" fill="#ffd24a" opacity="0.42"></circle>
+<circle cx="158.7" cy="211.4" r="2.4" fill="#ffd24a" opacity="0.42"></circle>
+<circle cx="95.5" cy="185.9" r="2.4" fill="#ffd24a" opacity="0.42"></circle>
+<circle cx="295.1" cy="185.7" r="2.4" fill="#ffd24a" opacity="0.42"></circle>
+<circle cx="141.8" cy="214.0" r="2.4" fill="#ffd24a" opacity="0.42"></circle>
+<circle cx="110.1" cy="197.2" r="2.4" fill="#ffd24a" opacity="0.42"></circle>
+<circle cx="213.3" cy="202.1" r="2.4" fill="#ffd24a" opacity="0.42"></circle>
+<circle cx="85.3" cy="194.2" r="2.4" fill="#ffd24a" opacity="0.42"></circle>
+<circle cx="100.8" cy="232.9" r="2.4" fill="#ffd24a" opacity="0.42"></circle>
+<circle cx="77.5" cy="222.4" r="2.4" fill="#ffd24a" opacity="0.42"></circle>
+<circle cx="286.3" cy="190.5" r="2.4" fill="#ffd24a" opacity="0.42"></circle>
+<circle cx="250.2" cy="196.9" r="2.4" fill="#ffd24a" opacity="0.42"></circle>
+<circle cx="117.5" cy="182.4" r="2.4" fill="#ffd24a" opacity="0.42"></circle>
+<circle cx="215.0" cy="181.9" r="2.4" fill="#ffd24a" opacity="0.42"></circle>
+<circle cx="259.0" cy="178.7" r="2.4" fill="#ffd24a" opacity="0.42"></circle>
+<circle cx="138.7" cy="204.9" r="2.4" fill="#ffd24a" opacity="0.42"></circle>
+<circle cx="161.2" cy="178.8" r="2.4" fill="#ffd24a" opacity="0.42"></circle>
+<circle cx="231.4" cy="191.1" r="2.4" fill="#ffd24a" opacity="0.42"></circle>
+<circle cx="145.9" cy="198.2" r="2.4" fill="#ffd24a" opacity="0.42"></circle>
+<circle cx="211.4" cy="181.5" r="2.4" fill="#ffd24a" opacity="0.42"></circle>
+<circle cx="200.7" cy="208.2" r="2.4" fill="#ffd24a" opacity="0.42"></circle>
+<circle cx="156.8" cy="199.2" r="2.4" fill="#ffd24a" opacity="0.42"></circle>
+<circle cx="244.8" cy="208.5" r="2.4" fill="#c9ced6" opacity="0.42"></circle>
+<circle cx="396.2" cy="176.6" r="2.4" fill="#c9ced6" opacity="0.42"></circle>
+<circle cx="347.6" cy="148.9" r="2.4" fill="#c9ced6" opacity="0.42"></circle>
+<circle cx="342.3" cy="153.8" r="2.4" fill="#c9ced6" opacity="0.42"></circle>
+<circle cx="81.1" cy="227.8" r="2.4" fill="#c9ced6" opacity="0.42"></circle>
+<circle cx="489.7" cy="138.4" r="2.4" fill="#c9ced6" opacity="0.42"></circle>
+<circle cx="362.4" cy="162.1" r="2.4" fill="#c9ced6" opacity="0.42"></circle>
+<circle cx="316.0" cy="174.7" r="2.4" fill="#c9ced6" opacity="0.42"></circle>
+<circle cx="225.0" cy="180.6" r="2.4" fill="#c9ced6" opacity="0.42"></circle>
+<circle cx="82.7" cy="190.2" r="2.4" fill="#c9ced6" opacity="0.42"></circle>
+<circle cx="101.9" cy="207.7" r="2.4" fill="#c9ced6" opacity="0.42"></circle>
+<circle cx="136.0" cy="191.1" r="2.4" fill="#c9ced6" opacity="0.42"></circle>
+<circle cx="141.8" cy="203.5" r="2.4" fill="#c9ced6" opacity="0.42"></circle>
+<circle cx="367.7" cy="174.8" r="2.4" fill="#c9ced6" opacity="0.42"></circle>
+<circle cx="316.7" cy="180.5" r="2.4" fill="#c9ced6" opacity="0.42"></circle>
+<circle cx="137.0" cy="208.1" r="2.4" fill="#c9ced6" opacity="0.42"></circle>
+<circle cx="218.3" cy="173.6" r="2.4" fill="#c9ced6" opacity="0.42"></circle>
+<circle cx="270.0" cy="186.6" r="2.4" fill="#c9ced6" opacity="0.42"></circle>
+<circle cx="408.4" cy="167.7" r="2.4" fill="#c9ced6" opacity="0.42"></circle>
+<circle cx="366.5" cy="155.1" r="2.4" fill="#c9ced6" opacity="0.42"></circle>
+<circle cx="179.2" cy="180.5" r="2.4" fill="#c9ced6" opacity="0.42"></circle>
+<circle cx="369.6" cy="157.3" r="2.4" fill="#c9ced6" opacity="0.42"></circle>
+<circle cx="95.1" cy="214.6" r="2.4" fill="#c9ced6" opacity="0.42"></circle>
+<circle cx="363.0" cy="149.8" r="2.4" fill="#c9ced6" opacity="0.42"></circle>
+<circle cx="183.3" cy="197.2" r="2.4" fill="#c9ced6" opacity="0.42"></circle>
+<circle cx="405.4" cy="167.0" r="2.4" fill="#c9ced6" opacity="0.42"></circle>
+<circle cx="126.1" cy="213.4" r="2.4" fill="#c9ced6" opacity="0.42"></circle>
+<circle cx="144.1" cy="213.2" r="2.4" fill="#c9ced6" opacity="0.42"></circle>
+<circle cx="244.3" cy="183.6" r="2.4" fill="#c9ced6" opacity="0.42"></circle>
+<circle cx="179.2" cy="178.9" r="2.4" fill="#c9ced6" opacity="0.42"></circle>
+<circle cx="311.1" cy="159.6" r="2.4" fill="#c9ced6" opacity="0.42"></circle>
+<circle cx="84.5" cy="225.5" r="2.4" fill="#c9ced6" opacity="0.42"></circle>
+<circle cx="352.4" cy="158.1" r="2.4" fill="#c9ced6" opacity="0.42"></circle>
+<circle cx="286.7" cy="195.2" r="2.4" fill="#c9ced6" opacity="0.42"></circle>
+<circle cx="136.6" cy="184.0" r="2.4" fill="#c9ced6" opacity="0.42"></circle>
+<circle cx="298.3" cy="185.9" r="2.4" fill="#c9ced6" opacity="0.42"></circle>
+<circle cx="224.9" cy="189.2" r="2.4" fill="#c9ced6" opacity="0.42"></circle>
+<circle cx="229.0" cy="203.8" r="2.4" fill="#c9ced6" opacity="0.42"></circle>
+<circle cx="153.7" cy="191.3" r="2.4" fill="#c9ced6" opacity="0.42"></circle>
+<circle cx="353.1" cy="168.6" r="2.4" fill="#c9ced6" opacity="0.42"></circle>
+<circle cx="331.6" cy="164.5" r="2.4" fill="#c9ced6" opacity="0.42"></circle>
+<circle cx="231.7" cy="180.7" r="2.4" fill="#c9ced6" opacity="0.42"></circle>
+<circle cx="340.2" cy="169.8" r="2.4" fill="#c9ced6" opacity="0.42"></circle>
+<circle cx="450.8" cy="143.2" r="2.4" fill="#c9ced6" opacity="0.42"></circle>
+<circle cx="234.9" cy="194.6" r="2.4" fill="#c9ced6" opacity="0.42"></circle>
+<circle cx="353.0" cy="141.9" r="2.4" fill="#c9ced6" opacity="0.42"></circle>
+<circle cx="493.1" cy="144.6" r="2.4" fill="#c9ced6" opacity="0.42"></circle>
+<circle cx="428.6" cy="148.8" r="2.4" fill="#c9ced6" opacity="0.42"></circle>
+<circle cx="238.1" cy="167.9" r="2.4" fill="#c9ced6" opacity="0.42"></circle>
+<circle cx="348.2" cy="177.1" r="2.4" fill="#c9ced6" opacity="0.42"></circle>
+<circle cx="152.1" cy="194.5" r="2.4" fill="#c9ced6" opacity="0.42"></circle>
+<circle cx="381.1" cy="168.8" r="2.4" fill="#c9ced6" opacity="0.42"></circle>
+<circle cx="180.8" cy="214.9" r="2.4" fill="#c9ced6" opacity="0.42"></circle>
+<circle cx="367.3" cy="153.5" r="2.4" fill="#c9ced6" opacity="0.42"></circle>
+<circle cx="286.2" cy="192.6" r="2.4" fill="#c9ced6" opacity="0.42"></circle>
+<circle cx="212.5" cy="184.6" r="2.4" fill="#c9ced6" opacity="0.42"></circle>
+<circle cx="181.7" cy="178.7" r="2.4" fill="#c9ced6" opacity="0.42"></circle>
+<circle cx="107.2" cy="202.6" r="2.4" fill="#c9ced6" opacity="0.42"></circle>
+<circle cx="163.4" cy="166.7" r="2.4" fill="#c9ced6" opacity="0.42"></circle>
+<circle cx="471.3" cy="157.6" r="2.4" fill="#c9ced6" opacity="0.42"></circle>
+        </g>
+        <line x1="69.7" y1="175.2" x2="264.4" y2="222.5" stroke="#ff3b46" stroke-width="3.5" stroke-linecap="round"></line>
+<line x1="69.7" y1="208.3" x2="308.7" y2="180.6" stroke="#ffd24a" stroke-width="3.5" stroke-linecap="round"></line>
+<line x1="69.7" y1="206.4" x2="512.3" y2="143.6" stroke="#c9ced6" stroke-width="3.5" stroke-linecap="round"></line>
+        <rect x="548" y="60" width="11" height="11" rx="2.5" fill="#ff3b46"></rect>
+<text x="566" y="70" fill="#dfe2e7" font-size="12" font-family="'JetBrains Mono',monospace">SOFT</text>
+<text x="566" y="84" fill="#ff3b46" font-size="11" font-family="'JetBrains Mono',monospace">-0.0707 s/lap</text>
+<rect x="548" y="106" width="11" height="11" rx="2.5" fill="#ffd24a"></rect>
+<text x="566" y="116" fill="#dfe2e7" font-size="12" font-family="'JetBrains Mono',monospace">MEDIUM</text>
+<text x="566" y="130" fill="#ffd24a" font-size="11" font-family="'JetBrains Mono',monospace">+0.0338 s/lap</text>
+<rect x="548" y="152" width="11" height="11" rx="2.5" fill="#c9ced6"></rect>
+<text x="566" y="162" fill="#dfe2e7" font-size="12" font-family="'JetBrains Mono',monospace">HARD</text>
+<text x="566" y="176" fill="#c9ced6" font-size="11" font-family="'JetBrains Mono',monospace">+0.0413 s/lap</text>
+      </svg>
+    </div>
+  </section>
+
+  <!-- ARCHITECTURE -->
+  <section style="max-width:1120px; margin:0 auto; padding:54px 28px 90px;">
+    <div style="display:flex; align-items:baseline; gap:14px; flex-wrap:wrap; margin-bottom:8px;">
+      <span style="font-family:'JetBrains Mono',monospace; font-size:12px; color:var(--accent); letter-spacing:.2em;">04 / ARCHITECTURE</span>
+      <h2 style="margin:0; font-size:34px; font-weight:700; letter-spacing:-0.02em;">One engine, everything composes</h2>
+    </div>
+    <p style="margin:0 0 30px; color:#969ca4; font-size:16px; max-width:72ch;">A clean data layer feeds three decoupled models, which feed one pure forward-simulation engine. Every strategic question is just that engine, called differently.</p>
+
+    <div class="grid3" style="display:grid; grid-template-columns:1fr 1fr 1fr; gap:14px; margin-bottom:14px;">
+      <div style="border:1px solid rgba(255,255,255,.1); border-radius:12px; padding:20px; background:rgba(255,255,255,.022);">
+        <div style="font-family:'JetBrains Mono',monospace; font-size:11px; color:#6f757e; letter-spacing:.16em; margin-bottom:10px;">DATA LAYER</div>
+        <div style="font-family:'JetBrains Mono',monospace; font-size:15px; font-weight:600; color:#fff; margin-bottom:8px;">clean · loader</div>
+        <div style="font-size:13px; color:#9aa0a8; line-height:1.55;">Build one canonical schema: flag out-laps, in-laps, SC/VSC and inaccurate laps so only honest green-flag pace survives.</div>
+      </div>
+      <div style="border:1px solid rgba(255,255,255,.1); border-radius:12px; padding:20px; background:rgba(255,255,255,.022);">
+        <div style="font-family:'JetBrains Mono',monospace; font-size:11px; color:#6f757e; letter-spacing:.16em; margin-bottom:10px;">MODELS</div>
+        <div style="font-family:'JetBrains Mono',monospace; font-size:15px; font-weight:600; color:#fff; margin-bottom:8px;">pace · fuel · tyre_deg</div>
+        <div style="font-size:13px; color:#9aa0a8; line-height:1.55;">Three modules, each owning one effect, injected — never importing each other. Decoupled by construction.</div>
+      </div>
+      <div style="border:1px solid rgba(255,255,255,.1); border-radius:12px; padding:20px; background:rgba(255,255,255,.022);">
+        <div style="font-family:'JetBrains Mono',monospace; font-size:11px; color:#6f757e; letter-spacing:.16em; margin-bottom:10px;">STATE</div>
+        <div style="font-family:'JetBrains Mono',monospace; font-size:15px; font-weight:600; color:#fff; margin-bottom:8px;">CarState</div>
+        <div style="font-size:13px; color:#9aa0a8; line-height:1.55;">Per-car dynamic state: tyre age, compound, cumulative time, pit lap. The quantity that evolves lap to lap.</div>
+      </div>
+    </div>
+
+    <div style="text-align:center; color:#454a52; font-size:20px; margin:6px 0 14px;">↓</div>
+
+    <div style="border:1px solid var(--accent); border-radius:14px; padding:26px; background:linear-gradient(180deg, rgba(255,46,59,.08), rgba(255,46,59,.02)); text-align:center; margin-bottom:14px;">
+      <div style="font-family:'JetBrains Mono',monospace; font-size:11px; letter-spacing:.2em; color:var(--accent); margin-bottom:8px;">THE CORE · PURE FUNCTION</div>
+      <div style="font-family:'JetBrains Mono',monospace; font-size:26px; font-weight:700; color:#fff;">forward_sim()</div>
+      <div style="font-size:14px; color:#aab0b8; margin-top:8px; max-width:60ch; margin-left:auto; margin-right:auto;">Advance the whole field N laps. Position falls out of cumulative time — sort-order, nothing more. Two cars or twenty: same loop.</div>
+    </div>
+
+    <div style="text-align:center; color:#454a52; font-size:20px; margin:6px 0 14px;">↓</div>
+
+    <div class="grid3" style="display:grid; grid-template-columns:1fr 1fr 1fr; gap:14px;">
+      <div style="border:1px solid rgba(255,255,255,.1); border-radius:12px; padding:22px; background:rgba(255,255,255,.022);">
+        <div style="font-family:'JetBrains Mono',monospace; font-size:15px; font-weight:600; color:var(--accent); margin-bottom:10px;">undercut_verdict()</div>
+        <div style="font-size:13.5px; color:#a4aab2; line-height:1.6;">Run the engine twice — pit now vs stay out — diff the gap to the rival. Does it work, and by how much?</div>
+      </div>
+      <div style="border:1px solid rgba(255,255,255,.1); border-radius:12px; padding:22px; background:rgba(255,255,255,.022);">
+        <div style="font-family:'JetBrains Mono',monospace; font-size:15px; font-weight:600; color:var(--accent); margin-bottom:10px;">backtest</div>
+        <div style="font-size:13.5px; color:#a4aab2; line-height:1.6;">Run it with the real pit lap and compare against what actually happened on track. Does the model hold up?</div>
+      </div>
+      <div style="border:1px solid rgba(255,255,255,.1); border-radius:12px; padding:22px; background:rgba(255,255,255,.022);">
+        <div style="font-family:'JetBrains Mono',monospace; font-size:15px; font-weight:600; color:var(--accent); margin-bottom:10px;">monte carlo</div>
+        <div style="font-size:13.5px; color:#a4aab2; line-height:1.6;">Run it many times with noise on the inputs. Turn a single verdict into a probability the undercut lands.</div>
+      </div>
+    </div>
+
+    <div style="margin-top:40px; padding-top:22px; border-top:1px solid rgba(255,255,255,.08); display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:14px; font-family:'JetBrains Mono',monospace; font-size:12.5px; color:#6f757e;">
+      <span>Python · pandas · NumPy · FastF1 lap data</span>
+      <a href="https://github.com/Arthavpatel/f1-undercut-sim" target="_blank" style="color:#cfd3d9; text-decoration:none; border:1px solid rgba(255,255,255,.14); padding:8px 14px; border-radius:6px;">github.com/Arthavpatel/f1-undercut-sim →</a>
+    </div>
+  </section>
+
+</div>
+
+<script>
+  var STATE = { gap: 1.2, pitLoss: 20, oldAge: 22, deg: 0.10, reaction: 3, windowLaps: 16 };
+
+  function $(id) { return document.getElementById(id); }
+
+  function runScenario(myPit, rivalPit) {
+    var gap = STATE.gap, pitLoss = STATE.pitLoss, oldAge = STATE.oldAge, deg = STATE.deg, windowLaps = STATE.windowLaps;
+    var base = 90;
+    var me = { age: oldAge, cum: gap, pitted: false };
+    var ri = { age: oldAge, cum: 0, pitted: false };
+    function step(c, lap, pit) {
+      c.cum += base + deg * c.age;
+      if (!c.pitted && lap === pit) { c.cum += pitLoss; c.age = 0; c.pitted = true; }
+      else c.age += 1;
+    }
+    var gaps = [me.cum - ri.cum];
+    for (var lap = 0; lap < windowLaps; lap++) {
+      step(me, lap, myPit);
+      step(ri, lap, rivalPit);
+      gaps.push(me.cum - ri.cum);
+    }
+    return gaps;
+  }
+
+  function render() {
+    var reaction = STATE.reaction, windowLaps = STATE.windowLaps;
+    var gA = runScenario(0, reaction);
+    var gB = runScenario(reaction, reaction);
+
+    var W = 680, H = 260, padL = 44, padR = 120, padT = 24, padB = 22;
+    var all = gA.concat(gB).concat([0]);
+    var ymin = Math.min.apply(null, all), ymax = Math.max.apply(null, all);
+    var pad = Math.max(0.4, (ymax - ymin) * 0.12); ymin -= pad; ymax += pad;
+    function xFor(i) { return padL + (i / windowLaps) * (W - padL - padR); }
+    function yFor(v) { return padT + ((ymax - v) / (ymax - ymin)) * (H - padT - padB); }
+    function pathOf(arr) { return arr.map(function(v, i) { return xFor(i).toFixed(1) + ',' + yFor(v).toFixed(1); }).join(' '); }
+    var zeroY = yFor(0);
+
+    var crossX = -10, crossR = 0;
+    for (var i = 1; i < gA.length; i++) {
+      if ((gA[i - 1] > 0) !== (gA[i] > 0)) {
+        var t = gA[i - 1] / (gA[i - 1] - gA[i]);
+        crossX = xFor(i - 1 + t); crossR = 4.5; break;
+      }
+    }
+
+    var gain = gB[gB.length - 1] - gA[gA.length - 1];
+    var clears = gA[gA.length - 1] < 0;
+    var works = gain > 0.05;
+
+    $('gapAPath').setAttribute('points', pathOf(gA));
+    $('gapBPath').setAttribute('points', pathOf(gB));
+    $('zeroLine').setAttribute('y1', zeroY.toFixed(1));
+    $('zeroLine').setAttribute('y2', zeroY.toFixed(1));
+    $('zeroText').setAttribute('y', (zeroY + 4).toFixed(1));
+    $('crossDot').setAttribute('cx', crossX.toFixed(1));
+    $('crossDot').setAttribute('cy', zeroY.toFixed(1));
+    $('crossDot').setAttribute('r', crossR);
+
+    $('verdictLabel').textContent = works ? 'UNDERCUT WORKS' : 'TRACK POSITION';
+    $('verdictLabel').style.color = works ? '#5fd0a6' : '#e6e9ee';
+    $('verdictBox').style.background = works ? 'rgba(95,208,166,.12)' : 'rgba(255,255,255,.05)';
+    $('verdictBox').style.borderColor = works ? 'rgba(95,208,166,.4)' : 'rgba(255,255,255,.16)';
+    $('gainText').textContent = (gain >= 0 ? '+' : '') + gain.toFixed(1) + 's';
+    $('clearsText').textContent = clears ? 'YES' : 'NO';
+  }
+
+  function onGap(v) { STATE.gap = +v; $('gapLabel').textContent = STATE.gap.toFixed(1) + 's'; render(); }
+  function onPitLoss(v) { STATE.pitLoss = +v; $('pitLossLabel').textContent = (+v).toFixed(1) + 's'; render(); }
+  function onOldAge(v) { STATE.oldAge = +v; $('oldAgeLabel').textContent = (+v) + ' laps'; render(); }
+  function onDeg(v) { STATE.deg = +v; $('degLabel').textContent = (+v).toFixed(3) + ' s/lap'; render(); }
+  function onReaction(v) {
+    STATE.reaction = +v;
+    $('reactionLabel').textContent = (+v) === 0 ? 'instant' : (+v) + ' lap' + ((+v) > 1 ? 's' : '');
+    render();
+  }
+
+  render();
+</script>
+</body>
+</html>

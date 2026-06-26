@@ -2,7 +2,7 @@
 
 **Does the undercut work?** A deterministic F1 race-strategy simulation engine that turns that question into a number — modeling lap time from base pace, fuel burn and tyre wear, then running the field forward pit-now vs stay-out to diff the result.
 
-### 🔴 [Live interactive demo →]([https://arthavpatel.github.io/f1-undercut-sim/](https://github.com/Arthavpatel/f1-undercut-sim/blob/master/docs/index.html))
+### 🔴 [Live interactive demo →](https://arthavpatel.github.io/f1-undercut-sim/)
 Drag the inputs (gap, pit-lane loss, tyre age, degradation rate, rival reaction delay) and watch the verdict re-run live.
 
 ---
